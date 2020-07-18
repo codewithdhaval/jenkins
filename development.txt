@@ -1,0 +1,6 @@
+Download sonarqube community edition and run locally - https://www.sonarqube.org/downloads/
+http://localhost:9000 (admin/admin)
+
+jenkins -
+http://localhost:8080/
+admin/admin

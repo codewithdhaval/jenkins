@@ -1,0 +1,98 @@
+#!groovy
+def isPrToDevelop() {
+    return (env.BRANCH_NAME =~ '^PR-\\d+' &&  env.CHANGE_TARGET == 'develop')
+}
+def BUILD_SUCCESS=true;
+if (isPrToDevelop()) {
+    print "isPrToDevelop"
+}
+else {
+    print "No PrToDevelop"
+}
+stage('Preparation') { // for display purposes
+      // Get code from a GitHub repository
+    node {
+        checkout scm
+    }
+   }
+
+try {
+stage ('Compile Stage') {
+    node {
+        withMaven(maven : 'MAVEN_HOME') {
+            sh 'mvn clean compile'
+        }
+    }
+}
+} catch (Exception exp) {
+    print "Found Exception"
+    BUILD_SUCCESS=false;
+} finally {
+    //do something
+}
+
+stage ('Testing Stage') {
+    node {
+        withMaven(maven : 'MAVEN_HOME') {
+            sh 'mvn test'
+        }
+    }
+}
+
+stage ('sonar Stage/static analysis') {
+    node {
+        withSonarQubeEnv('SonarQube'){
+            sh 'pwd'
+            sh 'ls -ltr'
+            sh 'mvn sonar:sonar -DskipTests'
+        }
+    }
+}
+if (BUILD_SUCCESS) {
+    print "Deploy Only if Build_SUCCESS"
+
+stage ('Deployment Stage') {
+    node {
+        withMaven(maven : 'MAVEN_HOME') {
+            sh 'mvn install'
+        }
+    }
+}
+} else {
+    print "==== Error in Pipeline ===="
+    exit(0);
+}
+stage('Sanity check') {
+      node {
+          input "Does the staging environment look ok?"
+      }
+  }
+
+stage('Deploy - Production') {
+    node {
+        //prod deploy steps
+    }
+}
+///ssh into server
+def remote = [:]
+remote.name = "centos-ansible"
+remote.host = "192.168.1.239"
+remote.allowAnyHosts = true
+stage('ssh into server') {
+    node {
+        withCredentials([usernamePassword(credentialsId: 'ansible-host', passwordVariable: 'password', usernameVariable: 'userName')]) {
+            remote.user = userName
+            remote.password = password
+            stage("SSH Steps") {
+                //writeFile file: 'test.sh', text: 'ls'
+                sshCommand remote: remote, command: 'pwd'
+                sshCommand remote: remote, command: 'cd /home/ansadmin/opt/tomcat'
+                sshCommand remote: remote, command: 'ls -ltr'
+                //sshScript remote: remote, script: 'test.sh'
+                //sshPut remote: remote, from: 'test.sh', into: '.'
+                //sshGet remote: remote, from: 'test.sh', into: 'test_new.sh', override: true
+                //sshRemove remote: remote, path: 'test.sh'
+            }
+        }
+    }
+}
